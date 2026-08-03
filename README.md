@@ -1,600 +1,117 @@
-# Ollama Swift Client
+# ollama-swift 🦙 — Ollama, at home in Swift
 
-A Swift client library for interacting with the
-[Ollama API](https://github.com/ollama/ollama/blob/main/docs/api.md).
+[![CI](https://img.shields.io/github/actions/workflow/status/steipete/ollama-swift/ci.yml?branch=main&style=flat-square&label=ci)](https://github.com/steipete/ollama-swift/actions/workflows/ci.yml)
+[![Swift 6.0](https://img.shields.io/badge/Swift-6.0-F05138?style=flat-square)](Package.swift)
+[![Apple platforms](https://img.shields.io/badge/platforms-Apple-lightgrey?style=flat-square)](Package.swift)
+[![License](https://img.shields.io/github/license/steipete/ollama-swift?style=flat-square)](LICENSE)
 
-## Requirements
+ollama-swift is a Swift package for the [Ollama HTTP API](https://github.com/ollama/ollama/blob/main/docs/api.md). It lets Apple-platform apps generate and stream text, chat with models, create embeddings, and manage models through one async client.
 
-- Swift 5.7+
-- macOS 13+
-- [Ollama](https://ollama.com)
+## Install
 
-## Installation
-
-### Swift Package Manager
-
-Add the following to your `Package.swift` file:
+Add the package and library product to your `Package.swift`:
 
 ```swift
-.package(url: "https://github.com/loopwork-ai/ollama-swift.git", from: "1.6.0")
+platforms: [.macOS(.v13)],
+dependencies: [
+    .package(url: "https://github.com/steipete/ollama-swift.git", branch: "main"),
+],
+targets: [
+    .target(name: "MyApp", dependencies: [
+        .product(name: "Ollama", package: "ollama-swift"),
+    ]),
+]
 ```
 
-## Usage
+This fork is source-only and does not publish tagged releases. It requires Swift 6.0 and supports macOS 13, Mac Catalyst 13, iOS 16, watchOS 9, tvOS 16, and visionOS 1 or newer.
 
-> [!NOTE]
-> The tests and example code for this library use the
-> [llama3.2](https://ollama.com/library/llama3.2) model.
-> Run the following command to download the model to run them yourself:
->
-> ```
-> ollama pull llama3.2
-> ```
+Your app also needs access to a running [Ollama](https://ollama.com) server. `Client.default` connects to `http://localhost:11434`.
 
-### Initializing the client
+## Quick start
+
+With Ollama running and the `llama3.2` model available:
 
 ```swift
 import Ollama
 
-// Use the default client (http://localhost:11434)
-let client = Client.default
-
-// Or create a custom client
-let customClient = Client(host: URL(string: "http://your-ollama-host:11434")!, userAgent: "MyApp/1.0")
-```
-
-### Generating text
-
-Generate text using a specified model:
-
-```swift
-do {
-    let response = try await client.generate(
-        model: "llama3.2",
-        prompt: "Tell me a joke about Swift programming.",
-        options: [
-            "temperature": 0.7,
-            "max_tokens": 100
-        ],
-        keepAlive: .minutes(10)  // Keep model loaded for 10 minutes
-    )
-    print(response.response)
-} catch {
-    print("Error: \(error)")
-}
-```
-
-#### Streaming text generation
-
-Generate text in a streaming fashion to receive responses in real-time:
-
-```swift
-do {
-    let stream = try await client.generateStream(
-        model: "llama3.2",
-        prompt: "Tell me a joke about Swift programming.",
-        options: [
-            "temperature": 0.7,
-            "max_tokens": 100
-        ]
-    )
-
-    var fullResponse = ""
-    for try await chunk in stream {
-        // Process each chunk of the response as it arrives
-        print(chunk.response, terminator: "")
-        fullResponse += chunk.response
-    }
-    print("\nFull response: \(fullResponse)")
-} catch {
-    print("Error: \(error)")
-}
-```
-
-### Chatting with a model
-
-Generate a chat completion:
-
-```swift
-do {
-    let response = try await client.chat(
-        model: "llama3.2",
-        messages: [
-            .system("You are a helpful assistant."),
-            .user("In which city is Apple Inc. located?")
-        ],
-        keepAlive: .minutes(10)  // Keep model loaded for 10 minutes
-    )
-    print(response.message.content)
-} catch {
-    print("Error: \(error)")
-}
-```
-
-#### Streaming chat responses
-
-Stream chat responses to get real-time partial completions:
-
-```swift
-do {
-    let stream = try await client.chatStream(
-        model: "llama3.2",
-        messages: [
-            .system("You are a helpful assistant."),
-            .user("Write a short poem about Swift programming.")
-        ]
-    )
-
-    var fullContent = ""
-    for try await chunk in stream {
-        // Process each chunk of the message as it arrives
-        if let content = chunk.message.content {
-            print(content, terminator: "")
-            fullContent += content
-        }
-    }
-    print("\nComplete poem: \(fullContent)")
-} catch {
-    print("Error: \(error)")
-}
-```
-
-You can also stream chat responses when using tools:
-
-```swift
-do {
-    let stream = try await client.chatStream(
-        model: "llama3.2",
-        messages: [
-            .system("You are a helpful assistant that can check the weather."),
-            .user("What's the weather like in Portland?")
-        ],
-        tools: [weatherTool]
-    )
-
-    for try await chunk in stream {
-        // Check if the model is making tool calls
-        if let toolCalls = chunk.message.toolCalls, !toolCalls.isEmpty {
-            print("Model is requesting tool: \(toolCalls[0].function.name)")
-        }
-
-        // Print content from the message as it streams
-        if let content = chunk.message.content {
-            print(content, terminator: "")
-        }
-
-        // Check if this is the final chunk
-        if chunk.done {
-            print("\nResponse complete")
-        }
-    }
-} catch {
-    print("Error: \(error)")
-}
-```
-
-### Using Structured Outputs
-
-You can request structured outputs from models by specifying a format.
-Pass `"json"` to get back a JSON string,
-or specify a full [JSON Schema](https://json-schema.org):
-
-```swift
-// Simple JSON format
-let response = try await client.chat(
+let response = try await Client.default.generate(
     model: "llama3.2",
-    messages: [.user("List 3 colors.")],
-    format: "json"
+    prompt: "Write one sentence about Swift."
 )
+print(response.response)
+```
 
-// Using JSON schema for more control
-let schema: Value = [
-    "type": "object",
-    "properties": [
-        "colors": [
-            "type": "array",
-            "items": [
-                "type": "object",
-                "properties": [
-                    "name": ["type": "string"],
-                    "hex": ["type": "string"]
-                ],
-                "required": ["name", "hex"]
-            ]
-        ]
-    ],
-    "required": ["colors"]
-]
+`generate` returns after the complete response arrives. Use `generateStream` when the UI should update token by token:
 
-let response = try await client.chat(
+```swift
+let stream = Client.default.generateStream(
     model: "llama3.2",
-    messages: [.user("List 3 colors with their hex codes.")],
-    format: schema
+    prompt: "Write a haiku about local models."
 )
 
-// The response will be a JSON object matching the schema:
-// {
-//   "colors": [
-//     {"name": "papayawhip", "hex": "#FFEFD5"},
-//     {"name": "indigo", "hex": "#4B0082"},
-//     {"name": "navy", "hex": "#000080"}
-//   ]
-// }
+for try await chunk in stream {
+    print(chunk.response, terminator: "")
+}
 ```
 
-The format parameter works with both `chat` and `generate` methods.
+## Chat
 
-### Using Thinking Models
-
-Some models support a "thinking" mode
-where they show their reasoning process before providing the final answer. 
-This is particularly useful for complex reasoning tasks.
+Messages preserve the roles expected by Ollama and can include image data or tool results.
 
 ```swift
-// Generate with thinking enabled
-let response = try await client.generate(
-    model: "deepseek-r1:8b",
-    prompt: "What is 17 * 23? Show your work.",
-    think: true
-)
-
-print("Thinking: \(response.thinking ?? "None")")
-print("Answer: \(response.response)")
-```
-
-You can also use thinking in chat conversations:
-
-```swift
-let response = try await client.chat(
-    model: "deepseek-r1:8b",
+let response = try await Client.default.chat(
+    model: "llama3.2",
     messages: [
-        .system("You are a helpful mathematician."),
-        .user("Calculate 9.9 + 9.11 and explain your reasoning.")
-    ],
-    think: true
-)
-
-print("Thinking: \(response.message.thinking ?? "None")")
-print("Response: \(response.message.content)")
-```
-
-> [!TIP]
-> You can check which models support thinking by examining their capabilities:
-> ```swift
-> let modelInfo = try await client.showModel("deepseek-r1:8b")
-> if modelInfo.capabilities.contains(.thinking) {
->     print("🧠 This model supports thinking!")
-> }
-> ```
-
-### Managing Model Memory with Keep-Alive
-
-You can control how long a model stays loaded in memory using the `keepAlive` parameter. This is useful for managing memory usage and response times.
-
-```swift
-// Use server default (typically 5 minutes)
-let response = try await client.generate(
-    model: "llama3.2",
-    prompt: "Hello!"
-    // keepAlive defaults to .default
-)
-
-// Keep model loaded for 10 minutes
-let response = try await client.generate(
-    model: "llama3.2",
-    prompt: "Hello!",
-    keepAlive: .minutes(10)
-)
-
-// Keep model loaded for 2 hours
-let response = try await client.chat(
-    model: "llama3.2",
-    messages: [.user("Hello!")],
-    keepAlive: .hours(2)
-)
-
-// Keep model loaded for 30 seconds
-let response = try await client.generate(
-    model: "llama3.2",
-    prompt: "Hello!",
-    keepAlive: .seconds(30)
-)
-
-// Keep model loaded indefinitely
-let response = try await client.chat(
-    model: "llama3.2",
-    messages: [.user("Hello!")],
-    keepAlive: .forever
-)
-
-// Unload model immediately after response
-let response = try await client.generate(
-    model: "llama3.2",
-    prompt: "Hello!",
-    keepAlive: .none
-)
-```
-
-- **`.default`** - Use the server's default keep-alive behavior (default if not specified)
-- **`.none`** - Unload immediately after the request
-- **`.seconds(Int)`** - Keep loaded for the specified number of seconds
-- **`.minutes(Int)`** - Keep loaded for the specified number of minutes  
-- **`.hours(Int)`** - Keep loaded for the specified number of hours
-- **`.forever`** - Keep loaded indefinitely
-
-> [!NOTE]
-> Zero durations (e.g., `.seconds(0)`) are treated as `.none` (unload immediately).
-> Negative durations are treated as `.forever` (keep loaded indefinitely).
-
-### Using Tools
-
-Ollama supports tool calling with models,
-allowing models to perform complex tasks or interact with external services.
-
-> [!NOTE]
-> Tool support requires a [compatible model](https://ollama.com/search?c=tools),
-> such as llama3.2.
-
-#### Creating a Tool
-
-Define a tool by specifying its name, description, parameters, and implementation:
-
-```swift
-struct WeatherInput: Codable {
-    let city: String
-}
-
-struct WeatherOutput: Codable {
-    let temperature: Double
-    let conditions: String
-}
-
-let weatherTool = Tool<WeatherInput, WeatherOutput>(
-    name: "get_current_weather",
-    description: """
-    Get the current weather for a city,
-    with conditions ("sunny", "cloudy", etc.)
-    and temperature in °C.
-    """,
-    parameters: [
-        "city": [
-            "type": "string",
-            "description": "The city to get weather for"
-        ]
-    ],
-    required: ["city"]
-) { input async throws -> WeatherOutput in
-    // Implement weather lookup logic here
-    return WeatherOutput(temperature: 18.5, conditions: "cloudy")
-}
-```
-
-> [!IMPORTANT]
-> In version 1.3.0 and later, 
-> the `parameters` argument should contain only the properties object, 
-> not the full JSON schema of the tool. 
-> 
-> For backward compatibility, 
-> passing a full schema in the `parameters` argument 
-> (with `"type"`, `"properties"`, and `"required"` fields) 
-> is still supported but deprecated and will emit a warning in debug builds.
->
-> <details>
-> <summary>Click to see code examples of old vs. new format</summary>
->
-> ```swift
-> // ✅ New format
-> let weatherTool = Tool<WeatherInput, WeatherOutput>(
->     name: "get_current_weather",
->     description: "Get the current weather for a city",
->     parameters: [
->         "city": [
->             "type": "string",
->             "description": "The city to get weather for"
->         ]
->     ],
->     required: ["city"]
-> ) { /* implementation */ }
->
-> // ❌ Deprecated format (still works but not recommended)
-> let weatherTool = Tool<WeatherInput, WeatherOutput>(
->     name: "get_current_weather",
->     description: "Get the current weather for a city",
->     parameters: [
->         "type": "object",
->         "properties": [
->             "city": [
->                 "type": "string",
->                 "description": "The city to get weather for"
->             ]
->         ],
->         "required": ["city"]
->     ]
-> ) { /* implementation */ }
-> ```
-> </details>
-
-#### Using Tools in Chat
-
-Provide tools to the model during chat:
-
-```swift
-let messages: [Chat.Message] = [
-    .system("You are a helpful assistant that can check the weather."),
-    .user("What's the weather like in Portland?")
-]
-
-let response = try await client.chat(
-    model: "llama3.1",
-    messages: messages,
-    tools: [weatherTool]
-)
-
-// Handle tool calls in the response
-if let toolCalls = response.message.toolCalls {
-    for toolCall in toolCalls {
-        print("Tool called: \(toolCall.function.name)")
-        print("Arguments: \(toolCall.function.arguments)")
-    }
-}
-```
-
-#### Multi-turn Tool Conversations
-
-Tools can be used in multi-turn conversations, where the model can use tool results to provide more detailed responses:
-
-```swift
-var messages: [Chat.Message] = [
-    .system("You are a helpful assistant that can convert colors."),
-    .user("What's the hex code for yellow?")
-]
-
-// First turn - model calls the tool
-let response1 = try await client.chat(
-    model: "llama3.1",
-    messages: messages,
-    tools: [rgbToHexTool]
-)
-
-enum ToolError {
-    case invalidParameters
-}
-
-// Add tool response to conversation
-if let toolCall = response1.message.toolCalls?.first {
-    // Parse the tool arguments
-    guard let args = toolCall.function.arguments,
-          let redValue = args["red"],
-          let greenValue = args["green"],
-          let blueValue = args["blue"],
-          let red = Double(redValue, strict: false),
-          let green = Double(greenValue, strict: false),
-          let blue = Double(blueValue, strict: false)
-    else {
-        throw ToolError.invalidParameters
-    }
-
-    let input = HexColorInput(
-        red: red,
-        green: green,
-        blue: blue
-    )
-
-    // Execute the tool with the input
-    let hexColor = try await rgbToHexTool(input)
-
-    // Add the tool result to the conversation
-    messages.append(.tool(hexColor))
-}
-
-// Continue conversation with tool result
-messages.append(.user("What other colors are similar?"))
-let response2 = try await client.chat(
-    model: "llama3.1",
-    messages: messages,
-    tools: [rgbToHexTool]
-)
-```
-
-### Generating embeddings
-
-Generate embeddings for a given text:
-
-```swift
-do {
-    let response = try await client.embed(
-        model: "llama3.2",
-        input: "Here is an article about llamas..."
-    )
-    print("Embeddings: \(response.embeddings)")
-} catch {
-    print("Error: \(error)")
-}
-```
-
-Generate embeddings for multiple texts in a single batch:
-
-```swift
-do {
-    let texts = [
-        "First article about llamas...",
-        "Second article about alpacas...",
-        "Third article about vicuñas..."
+        .system("Answer concisely."),
+        .user("Why is Swift concurrency useful?"),
     ]
+)
 
-    let response = try await client.embed(
-        model: "llama3.2",
-        inputs: texts
-    )
-
-    // Access embeddings for each input
-    for (index, embedding) in response.embeddings.rawValue.enumerated() {
-        print("Embedding \(index): \(embedding.count) dimensions")
-    }
-} catch {
-    print("Error: \(error)")
-}
+print(response.message.content)
 ```
 
-### Managing models
+Use `chatStream` for partial messages. Both chat methods also accept tools, JSON output formats, thinking mode, model options, and keep-alive settings.
 
-#### Listing models
+## Beyond text
 
-List available models:
+The same client covers the rest of the Ollama API:
+
+- Pass `format: "json"` or a JSON Schema to constrain generated output.
+- Define typed `Tool<Input, Output>` values and pass them to chat requests.
+- Attach `Data` images to generation requests or chat messages for vision-capable models.
+- Call `embed` with one string or a batch of strings.
+- List, inspect, create, copy, pull, push, and delete models.
+- Set `keepAlive` to control how long a model stays loaded.
+
+See [Usage](docs/usage.md) for compiling examples and the model-management API map.
+
+## Custom servers
+
+Create a client with a different base URL when Ollama runs elsewhere:
 
 ```swift
-do {
-    let models = try await client.listModels()
-    for model in models {
-        print("Model: \(model.name), Modified: \(model.modifiedAt)")
-    }
-} catch {
-    print("Error: \(error)")
-}
+import Foundation
+import Ollama
+
+let client = Client(
+    host: URL(string: "http://ollama.local:11434")!,
+    userAgent: "MyApp/1.0"
+)
 ```
 
-#### Retrieving model information
+The client uses `URLSession` and accepts an injected session for custom transports or tests.
 
-Get detailed information about a specific model:
+## Development
 
-```swift
-do {
-    let modelInfo = try await client.showModel("llama3.2")
-    print("Modelfile: \(modelInfo.modelfile)")
-    print("Parameters: \(modelInfo.parameters)")
-    print("Template: \(modelInfo.template)")
-} catch {
-    print("Error: \(error)")
-}
+Build the package and run the service-independent tests:
+
+```sh
+swift build
+CI=1 swift test
 ```
 
-#### Pulling a model
+The integration tests require a running Ollama server with `llama3.2` installed; run the test suite without `CI` to include them.
 
-Download a model from the Ollama library:
+## License
 
-```swift
-do {
-    let success = try await client.pullModel("llama3.2")
-    if success {
-        print("Model successfully pulled")
-    } else {
-        print("Failed to pull model")
-    }
-} catch {
-    print("Error: \(error)")
-}
-```
-
-#### Pushing a model
-
-```swift
-do {
-    let success = try await client.pushModel("mynamespace/mymodel:latest")
-    if success {
-        print("Model successfully pushed")
-    } else {
-        print("Failed to push model")
-    }
-} catch {
-    print("Error: \(error)")
-}
-```
+Apache 2.0. See [LICENSE](LICENSE).
